@@ -2,7 +2,7 @@
 // © obsirk, krsboone
 
 //@version=6
-indicator("Candle Classification System", overlay=true, max_labels_count=500)
+indicator("Candle Enumeration", overlay=true, max_labels_count=500)
 
 // ============================================================================
 // INPUT PARAMETERS
