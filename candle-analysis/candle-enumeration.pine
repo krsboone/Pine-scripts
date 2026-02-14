@@ -1,0 +1,290 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © obsirk, krsboone
+
+//@version=6
+indicator("Candle Classification System", overlay=true)
+
+// ============================================================================
+// INPUT PARAMETERS
+// ============================================================================
+
+// Analysis Range
+measure_lookback = input.int(100, "Measure Lookback Range", minval=1, maxval=500, tooltip="How many candles to examine")
+measure_offset = input.int(0, "Measure Offset", minval=0, maxval=400, tooltip="How many candles back to start the analysis (0 = current)")
+
+// Weighting
+weighting = input.float(4.0, "Weighting Multiplier", minval=0.1, maxval=20.0, step=0.1, tooltip="Multiplier for wick percentage calculations - higher values increase sensitivity")
+
+// Display Options
+show_labels = input.bool(true, "Show Classification Labels")
+label_position = input.string("Above", "Label Position", options=["Above", "Below"])
+show_table = input.bool(true, "Show Info Table")
+show_stats = input.bool(true, "Show Statistics Table")
+label_size_input = input.string("Small", "Label Size", options=["Tiny", "Small", "Normal", "Large"])
+
+// ============================================================================
+// CANDLE CLASSIFICATION LOGIC
+// ============================================================================
+
+// Determine if candle is bullish or bearish
+is_bullish = close > open
+is_bearish = close <= open
+
+// FIRST DIGIT: Direction (1 = Up, 2 = Down)
+first_digit = is_bullish ? 1 : 2
+
+// SECOND DIGIT CALCULATION
+var float lower_wick_percent = na
+
+if is_bullish
+    // Bullish: (close - low) / close * 100 * weighting
+    lower_wick_percent := close > 0 ? ((close - low) / close) * 100 * weighting : 0
+else
+    // Bearish: (high - close) / close * 100 * weighting
+    lower_wick_percent := close > 0 ? ((high - close) / close) * 100 * weighting : 0
+
+// Classify into 0-9 based on percentage ranges
+second_digit = lower_wick_percent >= 90 ? 9 : lower_wick_percent >= 80 ? 8 : lower_wick_percent >= 70 ? 7 : lower_wick_percent >= 60 ? 6 : lower_wick_percent >= 50 ? 5 : lower_wick_percent >= 40 ? 4 : lower_wick_percent >= 30 ? 3 : lower_wick_percent >= 20 ? 2 : lower_wick_percent >= 10 ? 1 : 0
+
+// THIRD DIGIT CALCULATION
+var float upper_wick_percent = na
+
+if is_bullish
+    // Bullish: (high - open) / open * 100 * weighting
+    upper_wick_percent := open > 0 ? ((high - open) / open) * 100 * weighting : 0
+else
+    // Bearish: (open - low) / open * 100 * weighting
+    upper_wick_percent := open > 0 ? ((open - low) / open) * 100 * weighting : 0
+
+// Classify into 0-9 based on percentage ranges
+third_digit = upper_wick_percent >= 90 ? 9 : upper_wick_percent >= 80 ? 8 : upper_wick_percent >= 70 ? 7 : upper_wick_percent >= 60 ? 6 : upper_wick_percent >= 50 ? 5 : upper_wick_percent >= 40 ? 4 : upper_wick_percent >= 30 ? 3 : upper_wick_percent >= 20 ? 2 : upper_wick_percent >= 10 ? 1 : 0
+
+// FINAL CLASSIFICATION: Combine all three digits
+classification = first_digit * 100 + second_digit * 10 + third_digit
+
+// ============================================================================
+// DETERMINE IF CANDLE IS IN ANALYSIS RANGE
+// ============================================================================
+
+// Calculate the range boundaries
+range_start = bar_index - measure_lookback - measure_offset
+range_end = bar_index - measure_offset
+
+// Check if current bar is within the analysis range
+in_analysis_range = bar_index >= range_start and bar_index <= range_end
+
+// ============================================================================
+// COLLECT STATISTICS FOR RANGE
+// ============================================================================
+
+var int total_candles = 0
+var int bullish_count = 0
+var int bearish_count = 0
+var array<int> classification_history = array.new_int(0)
+
+// Track most common classifications
+var int count_100s = 0
+var int count_200s = 0
+var int count_high_lower_wick = 0
+var int count_high_upper_wick = 0
+
+if in_analysis_range and barstate.islast
+    // Reset counters
+    total_candles := 0
+    bullish_count := 0
+    bearish_count := 0
+    count_100s := 0
+    count_200s := 0
+    count_high_lower_wick := 0
+    count_high_upper_wick := 0
+
+    // Loop through the range and collect statistics
+    for i = measure_offset to (measure_lookback + measure_offset - 1)
+        if i <= bar_index
+            candle_is_bullish = close[i] > open[i]
+
+            // Count direction
+            total_candles := total_candles + 1
+            if candle_is_bullish
+                bullish_count := bullish_count + 1
+            else
+                bearish_count := bearish_count + 1
+
+            // Calculate classification for this historical candle
+            hist_first = candle_is_bullish ? 1 : 2
+
+            // Second digit calculation
+            hist_lower_pct = 0.0
+            if candle_is_bullish
+                // Bullish: (close - low) / close * 100 * weighting
+                hist_lower_pct := close[i] > 0 ? ((close[i] - low[i]) / close[i]) * 100 * weighting : 0
+            else
+                // Bearish: (high - close) / close * 100 * weighting
+                hist_lower_pct := close[i] > 0 ? ((high[i] - close[i]) / close[i]) * 100 * weighting : 0
+
+            hist_second = hist_lower_pct >= 90 ? 9 : hist_lower_pct >= 80 ? 8 : hist_lower_pct >= 70 ? 7 : hist_lower_pct >= 60 ? 6 : hist_lower_pct >= 50 ? 5 : hist_lower_pct >= 40 ? 4 : hist_lower_pct >= 30 ? 3 : hist_lower_pct >= 20 ? 2 : hist_lower_pct >= 10 ? 1 : 0
+
+            // Third digit calculation
+            hist_upper_pct = 0.0
+            if candle_is_bullish
+                // Bullish: (high - open) / open * 100 * weighting
+                hist_upper_pct := open[i] > 0 ? ((high[i] - open[i]) / open[i]) * 100 * weighting : 0
+            else
+                // Bearish: (open - low) / open * 100 * weighting
+                hist_upper_pct := open[i] > 0 ? ((open[i] - low[i]) / open[i]) * 100 * weighting : 0
+
+            hist_third = hist_upper_pct >= 90 ? 9 : hist_upper_pct >= 80 ? 8 : hist_upper_pct >= 70 ? 7 : hist_upper_pct >= 60 ? 6 : hist_upper_pct >= 50 ? 5 : hist_upper_pct >= 40 ? 4 : hist_upper_pct >= 30 ? 3 : hist_upper_pct >= 20 ? 2 : hist_upper_pct >= 10 ? 1 : 0
+
+            hist_classification = hist_first * 100 + hist_second * 10 + hist_third
+
+            // Count patterns
+            if hist_classification >= 100 and hist_classification <= 111
+                count_100s := count_100s + 1
+
+            if hist_classification >= 200 and hist_classification <= 211
+                count_200s := count_200s + 1
+
+            if hist_second >= 3
+                count_high_lower_wick := count_high_lower_wick + 1
+
+            if hist_third >= 3
+                count_high_upper_wick := count_high_upper_wick + 1
+
+// ============================================================================
+// VISUALIZATION
+// ============================================================================
+
+// Convert label size
+label_size_value = label_size_input == "Tiny" ? size.tiny : label_size_input == "Small" ? size.small : label_size_input == "Normal" ? size.normal : size.large
+
+// Display classification labels on candles (only in range)
+if show_labels and in_analysis_range
+    label_y_position = label_position == "Above" ? yloc.abovebar : yloc.belowbar
+    label_color = is_bullish ? color.new(color.green, 70) : color.new(color.red, 70)
+    label_text_color = is_bullish ? color.green : color.red
+
+    label.new(bar_index, label_position == "Above" ? high : low, str.tostring(classification), style=label.style_none, color=label_color, textcolor=label_text_color, size=label_size_value, yloc=label_y_position)
+
+// Highlight the analysis range with background color
+bgcolor(in_analysis_range ? color.new(color.blue, 95) : na, title="Analysis Range")
+
+// Color candles based on whether they're in range
+candle_color = in_analysis_range ? (is_bullish ? color.new(color.green, 20) : color.new(color.red, 20)) : color.new(color.gray, 70)
+
+plotcandle(open, high, low, close, color=candle_color, wickcolor=candle_color, bordercolor=candle_color)
+
+// ============================================================================
+// INFORMATION TABLE
+// ============================================================================
+
+if show_table
+    var table info_table = table.new(position.top_right, 2, 11, bgcolor=color.new(color.black, 85), border_width=1, border_color=color.new(color.gray, 50))
+
+    if barstate.islast
+        // Header
+        table.cell(info_table, 0, 0, "Current Candle", text_color=color.white, bgcolor=color.new(color.gray, 70), tooltip="Classification breakdown")
+        table.cell(info_table, 1, 0, "Value", text_color=color.white, bgcolor=color.new(color.gray, 70))
+
+        // Classification
+        table.cell(info_table, 0, 1, "Classification", text_color=color.white)
+        table.cell(info_table, 1, 1, str.tostring(classification), text_color=is_bullish ? color.lime : color.red, tooltip="Three-digit candle code")
+
+        // Direction
+        table.cell(info_table, 0, 2, "Direction (1st)", text_color=color.white)
+        table.cell(info_table, 1, 2, str.tostring(first_digit) + " (" + (is_bullish ? "UP" : "DOWN") + ")", text_color=is_bullish ? color.lime : color.red)
+
+        // Second digit details
+        second_desc = is_bullish ? "Close to Low" : "High to Close"
+        table.cell(info_table, 0, 3, "2nd Digit (" + second_desc + ")", text_color=color.white)
+        table.cell(info_table, 1, 3, str.tostring(second_digit) + " (" + str.tostring(lower_wick_percent, "#.#") + "%)", text_color=color.yellow, tooltip="Weighted percentage")
+
+        // Third digit details
+        third_desc = is_bullish ? "High to Open" : "Open to Low"
+        table.cell(info_table, 0, 4, "3rd Digit (" + third_desc + ")", text_color=color.white)
+        table.cell(info_table, 1, 4, str.tostring(third_digit) + " (" + str.tostring(upper_wick_percent, "#.#") + "%)", text_color=color.orange, tooltip="Weighted percentage")
+
+        // Weighting
+        table.cell(info_table, 0, 5, "Weighting", text_color=color.white)
+        table.cell(info_table, 1, 5, str.tostring(weighting, "#.#") + "x", text_color=color.aqua)
+
+        // Price details
+        table.cell(info_table, 0, 6, "Price Details", text_color=color.white, bgcolor=color.new(color.gray, 80))
+        table.cell(info_table, 1, 6, "", bgcolor=color.new(color.gray, 80))
+
+        table.cell(info_table, 0, 7, "O / C / H / L", text_color=color.white)
+        table.cell(info_table, 1, 7, str.tostring(open, format.mintick) + " / " + str.tostring(close, format.mintick) + " / " + str.tostring(high, format.mintick) + " / " + str.tostring(low, format.mintick), text_color=color.white)
+
+        // Range info
+        table.cell(info_table, 0, 8, "Lookback", text_color=color.white)
+        table.cell(info_table, 1, 8, str.tostring(measure_lookback) + " bars", text_color=color.white)
+
+        table.cell(info_table, 0, 9, "Offset", text_color=color.white)
+        table.cell(info_table, 1, 9, str.tostring(measure_offset) + " bars", text_color=measure_offset > 0 ? color.orange : color.white)
+
+        // In range indicator
+        table.cell(info_table, 0, 10, "In Range?", text_color=color.white)
+        table.cell(info_table, 1, 10, in_analysis_range ? "YES" : "NO", text_color=in_analysis_range ? color.lime : color.gray)
+
+// ============================================================================
+// STATISTICS TABLE
+// ============================================================================
+
+if show_stats and barstate.islast
+    var table stats_table = table.new(position.bottom_right, 2, 8, bgcolor=color.new(color.black, 85), border_width=1, border_color=color.new(color.gray, 50))
+
+    // Header
+    table.cell(stats_table, 0, 0, "Range Statistics", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(stats_table, 1, 0, "Count / %", text_color=color.white, bgcolor=color.new(color.gray, 70))
+
+    // Total candles
+    table.cell(stats_table, 0, 1, "Total Candles", text_color=color.white)
+    table.cell(stats_table, 1, 1, str.tostring(total_candles), text_color=color.white)
+
+    // Bullish
+    bullish_pct = total_candles > 0 ? (bullish_count / total_candles) * 100 : 0
+    table.cell(stats_table, 0, 2, "Bullish (1XX)", text_color=color.lime)
+    table.cell(stats_table, 1, 2, str.tostring(bullish_count) + " (" + str.tostring(bullish_pct, "#.#") + "%)", text_color=color.white)
+
+    // Bearish
+    bearish_pct = total_candles > 0 ? (bearish_count / total_candles) * 100 : 0
+    table.cell(stats_table, 0, 3, "Bearish (2XX)", text_color=color.red)
+    table.cell(stats_table, 1, 3, str.tostring(bearish_count) + " (" + str.tostring(bearish_pct, "#.#") + "%)", text_color=color.white)
+
+    // Patterns
+    table.cell(stats_table, 0, 4, "Patterns", text_color=color.white, bgcolor=color.new(color.gray, 80))
+    table.cell(stats_table, 1, 4, "", bgcolor=color.new(color.gray, 80))
+
+    // Strong bullish
+    strong_bull_pct = total_candles > 0 ? (count_100s / total_candles) * 100 : 0
+    table.cell(stats_table, 0, 5, "Strong Bull (100-111)", text_color=color.lime)
+    table.cell(stats_table, 1, 5, str.tostring(count_100s) + " (" + str.tostring(strong_bull_pct, "#.#") + "%)", text_color=color.white)
+
+    // Strong bearish
+    strong_bear_pct = total_candles > 0 ? (count_200s / total_candles) * 100 : 0
+    table.cell(stats_table, 0, 6, "Strong Bear (200-211)", text_color=color.red)
+    table.cell(stats_table, 1, 6, str.tostring(count_200s) + " (" + str.tostring(strong_bear_pct, "#.#") + "%)", text_color=color.white)
+
+    // High lower wick
+    lower_wick_pct = total_candles > 0 ? (count_high_lower_wick / total_candles) * 100 : 0
+    table.cell(stats_table, 0, 7, "High 2nd Digit (X3+X)", text_color=color.yellow)
+    table.cell(stats_table, 1, 7, str.tostring(count_high_lower_wick) + " (" + str.tostring(lower_wick_pct, "#.#") + "%)", text_color=color.white)
+
+// ============================================================================
+// VISUAL RANGE MARKERS
+// ============================================================================
+
+// Draw vertical lines to mark the analysis range
+if barstate.islast
+    var line start_line = na
+    var line end_line = na
+
+    // Delete old lines
+    if not na(start_line)
+        line.delete(start_line)
+    if not na(end_line)
+        line.delete(end_line)
+
+    // Draw new range markers
+    start_line := line.new(bar_index - measure_lookback - measure_offset, low[measure_lookback + measure_offset], bar_index - measure_lookback - measure_offset, high[measure_lookback + measure_offset], color=color.new(color.blue, 50), width=2, style=line.style_dashed)
+
+    end_line := line.new(bar_index - measure_offset, low[measure_offset], bar_index - measure_offset, high[measure_offset], color=color.new(color.blue, 50), width=2, style=line.style_dashed)
