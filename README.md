@@ -5,7 +5,7 @@
 
 A collection of some of the pine scripts I've built and use in Trading View
 
-Over tiem I'll add more that I'm comfortable sharing
+Over time I'll add more that I'm comfortable sharing
 
 **historical-trends**
 
