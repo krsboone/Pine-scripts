@@ -1,5 +1,5 @@
 // This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © obsirk krsboone
+// © obsirk, krsboone
 
 //@version=6
 indicator("Historical Price Analysis & Projection Line", overlay=true, max_bars_back=500)
