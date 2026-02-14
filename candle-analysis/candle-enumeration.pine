@@ -2,7 +2,7 @@
 // © obsirk, krsboone
 
 //@version=6
-indicator("Candle Enumeration", overlay=true)
+indicator("Candle Classification System", overlay=true, max_labels_count=500)
 
 // ============================================================================
 // INPUT PARAMETERS
@@ -66,21 +66,25 @@ classification = first_digit * 100 + second_digit * 10 + third_digit
 // DETERMINE IF CANDLE IS IN ANALYSIS RANGE
 // ============================================================================
 
-// Calculate the range boundaries
-range_start = bar_index - measure_lookback - measure_offset
-range_end = bar_index - measure_offset
+// Calculate how many bars back the current bar is from the most recent bar
+bars_back = bar_index - bar_index[0]
+
+// For current bar execution, determine the range
+current_bar_index = bar_index
+range_start_offset = measure_lookback + measure_offset
+range_end_offset = measure_offset
 
 // Check if current bar is within the analysis range
-in_analysis_range = bar_index >= range_start and bar_index <= range_end
+// Current bar should be between (last_bar - lookback - offset) and (last_bar - offset)
+in_analysis_range = bars_back >= measure_offset and bars_back < (measure_lookback + measure_offset)
 
 // ============================================================================
-// COLLECT STATISTICS FOR RANGE
+// COLLECT STATISTICS FOR RANGE (only on last bar)
 // ============================================================================
 
 var int total_candles = 0
 var int bullish_count = 0
 var int bearish_count = 0
-var array<int> classification_history = array.new_int(0)
 
 // Track most common classifications
 var int count_100s = 0
@@ -88,7 +92,7 @@ var int count_200s = 0
 var int count_high_lower_wick = 0
 var int count_high_upper_wick = 0
 
-if in_analysis_range and barstate.islast
+if barstate.islast
     // Reset counters
     total_candles := 0
     bullish_count := 0
@@ -116,10 +120,8 @@ if in_analysis_range and barstate.islast
             // Second digit calculation
             hist_lower_pct = 0.0
             if candle_is_bullish
-                // Bullish: (close - low) / close * 100 * weighting
                 hist_lower_pct := close[i] > 0 ? ((close[i] - low[i]) / close[i]) * 100 * weighting : 0
             else
-                // Bearish: (high - close) / close * 100 * weighting
                 hist_lower_pct := close[i] > 0 ? ((high[i] - close[i]) / close[i]) * 100 * weighting : 0
 
             hist_second = hist_lower_pct >= 90 ? 9 : hist_lower_pct >= 80 ? 8 : hist_lower_pct >= 70 ? 7 : hist_lower_pct >= 60 ? 6 : hist_lower_pct >= 50 ? 5 : hist_lower_pct >= 40 ? 4 : hist_lower_pct >= 30 ? 3 : hist_lower_pct >= 20 ? 2 : hist_lower_pct >= 10 ? 1 : 0
@@ -127,10 +129,8 @@ if in_analysis_range and barstate.islast
             // Third digit calculation
             hist_upper_pct = 0.0
             if candle_is_bullish
-                // Bullish: (high - open) / open * 100 * weighting
                 hist_upper_pct := open[i] > 0 ? ((high[i] - open[i]) / open[i]) * 100 * weighting : 0
             else
-                // Bearish: (open - low) / open * 100 * weighting
                 hist_upper_pct := open[i] > 0 ? ((open[i] - low[i]) / open[i]) * 100 * weighting : 0
 
             hist_third = hist_upper_pct >= 90 ? 9 : hist_upper_pct >= 80 ? 8 : hist_upper_pct >= 70 ? 7 : hist_upper_pct >= 60 ? 6 : hist_upper_pct >= 50 ? 5 : hist_upper_pct >= 40 ? 4 : hist_upper_pct >= 30 ? 3 : hist_upper_pct >= 20 ? 2 : hist_upper_pct >= 10 ? 1 : 0
@@ -151,19 +151,47 @@ if in_analysis_range and barstate.islast
                 count_high_upper_wick := count_high_upper_wick + 1
 
 // ============================================================================
-// VISUALIZATION
+// VISUALIZATION - Draw labels only on last bar for entire range
 // ============================================================================
 
 // Convert label size
 label_size_value = label_size_input == "Tiny" ? size.tiny : label_size_input == "Small" ? size.small : label_size_input == "Normal" ? size.normal : size.large
 
-// Display classification labels on candles (only in range)
-if show_labels and in_analysis_range
-    label_y_position = label_position == "Above" ? yloc.abovebar : yloc.belowbar
-    label_color = is_bullish ? color.new(color.green, 70) : color.new(color.red, 70)
-    label_text_color = is_bullish ? color.green : color.red
+// Draw all labels at once on the last bar
+if show_labels and barstate.islast
+    // Loop through the range and draw labels
+    for i = measure_offset to (measure_lookback + measure_offset - 1)
+        if i <= bar_index
+            // Calculate classification for this bar
+            bar_is_bullish = close[i] > open[i]
+            bar_first = bar_is_bullish ? 1 : 2
 
-    label.new(bar_index, label_position == "Above" ? high : low, str.tostring(classification), style=label.style_none, color=label_color, textcolor=label_text_color, size=label_size_value, yloc=label_y_position)
+            // Second digit
+            bar_lower_pct = 0.0
+            if bar_is_bullish
+                bar_lower_pct := close[i] > 0 ? ((close[i] - low[i]) / close[i]) * 100 * weighting : 0
+            else
+                bar_lower_pct := close[i] > 0 ? ((high[i] - close[i]) / close[i]) * 100 * weighting : 0
+
+            bar_second = bar_lower_pct >= 90 ? 9 : bar_lower_pct >= 80 ? 8 : bar_lower_pct >= 70 ? 7 : bar_lower_pct >= 60 ? 6 : bar_lower_pct >= 50 ? 5 : bar_lower_pct >= 40 ? 4 : bar_lower_pct >= 30 ? 3 : bar_lower_pct >= 20 ? 2 : bar_lower_pct >= 10 ? 1 : 0
+
+            // Third digit
+            bar_upper_pct = 0.0
+            if bar_is_bullish
+                bar_upper_pct := open[i] > 0 ? ((high[i] - open[i]) / open[i]) * 100 * weighting : 0
+            else
+                bar_upper_pct := open[i] > 0 ? ((open[i] - low[i]) / open[i]) * 100 * weighting : 0
+
+            bar_third = bar_upper_pct >= 90 ? 9 : bar_upper_pct >= 80 ? 8 : bar_upper_pct >= 70 ? 7 : bar_upper_pct >= 60 ? 6 : bar_upper_pct >= 50 ? 5 : bar_upper_pct >= 40 ? 4 : bar_upper_pct >= 30 ? 3 : bar_upper_pct >= 20 ? 2 : bar_upper_pct >= 10 ? 1 : 0
+
+            bar_classification = bar_first * 100 + bar_second * 10 + bar_third
+
+            // Draw label
+            label_y_position = label_position == "Above" ? yloc.abovebar : yloc.belowbar
+            label_color = bar_is_bullish ? color.new(color.green, 70) : color.new(color.red, 70)
+            label_text_color = bar_is_bullish ? color.green : color.red
+
+            label.new(bar_index - i, label_position == "Above" ? high[i] : low[i], str.tostring(bar_classification), style=label.style_none, color=label_color, textcolor=label_text_color, size=label_size_value, yloc=label_y_position)
 
 // Highlight the analysis range with background color
 bgcolor(in_analysis_range ? color.new(color.blue, 95) : na, title="Analysis Range")
