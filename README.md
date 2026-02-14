@@ -40,4 +40,4 @@ Third digit:
 Configs:
 1. Lookback range (how far back to examine)
 2. Measure offset (how many candles back to beging lookback)
-3. Weighting (gives returned values more strength. Default = 4, so roughly you can expect a 10% move to yield a 4 or a 20% move to tield an 8)
+3. Weighting (gives returned values more strength. Default = 4, so roughly you can expect a 10% move to yield a 4 or a 20% move to yield an 8)
