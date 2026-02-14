@@ -1,0 +1,155 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © obsirk krsboone
+
+//@version=6
+indicator("Historical Price Analysis & Projection Line", overlay=true, max_bars_back=500)
+
+// ============================================================================
+// INPUT PARAMETERS
+// ============================================================================
+
+lookback_range = input.int(180, "Lookback Range (N)", minval=10, maxval=500)
+lookback_offset = input.int(0, "Lookback Offset (bars back)", minval=0, maxval=400, tooltip="How many bars back to start the analysis. 0 = current, 10 = start 10 bars ago")
+dot_size = input.string("Normal", "Dot Size", options=["Tiny", "Small", "Normal", "Large", "Huge"])
+show_debug = input.bool(false, "Show Debug Labels")
+
+// ============================================================================
+// CALCULATE KEY PRICE POINTS
+// ============================================================================
+
+// Only calculate if we have enough bars
+if bar_index >= lookback_range + lookback_offset
+
+    // POINT 1: Average open price of first 5 candles in range
+    var float point1_price = na
+    var int point1_bar = na
+
+    point1_bar := bar_index - lookback_range - lookback_offset + 2
+    point1_price := (open[lookback_range + lookback_offset] + open[lookback_range + lookback_offset - 1] + open[lookback_range + lookback_offset - 2] + open[lookback_range + lookback_offset - 3] + open[lookback_range + lookback_offset - 4]) / 5
+
+    // POINT 2: Average closing price of last 5 candles in range
+    var float point2_price = na
+    var int point2_bar = na
+
+    point2_bar := bar_index - lookback_offset - 2
+    point2_price := (close[lookback_offset] + close[lookback_offset + 1] + close[lookback_offset + 2] + close[lookback_offset + 3] + close[lookback_offset + 4]) / 5
+
+    // POINT 3: Average of high and low for middle 5 candles
+    var float point3_price = na
+    var int point3_bar = na
+
+    middle_offset = math.floor(lookback_range / 2)
+    point3_bar := bar_index - middle_offset - lookback_offset - 2
+
+    sum_high_low = (high[middle_offset + lookback_offset] + low[middle_offset + lookback_offset] + high[middle_offset + lookback_offset - 1] + low[middle_offset + lookback_offset - 1] + high[middle_offset + lookback_offset - 2] + low[middle_offset + lookback_offset - 2] + high[middle_offset + lookback_offset - 3] + low[middle_offset + lookback_offset - 3] + high[middle_offset + lookback_offset - 4] + low[middle_offset + lookback_offset - 4])
+
+    point3_price := sum_high_low / 10
+
+    // ============================================================================
+    // DRAW DOTS AT KEY POINTS
+    // ============================================================================
+
+    // Convert dot size input to Pine Script size
+    dot_size_value = dot_size == "Tiny" ? size.tiny : dot_size == "Small" ? size.small : dot_size == "Normal" ? size.normal : dot_size == "Large" ? size.large : size.huge
+
+    // Draw dots at the calculated points
+    if barstate.islast
+        // Point 1 - First 5 candles average (Blue)
+        label.new(point1_bar, point1_price, "1", style=label.style_circle, color=color.new(color.blue, 0), textcolor=color.white, size=dot_size_value)
+
+        // Point 3 - Middle 5 candles average (Yellow)
+        label.new(point3_bar, point3_price, "3", style=label.style_circle, color=color.new(color.yellow, 0), textcolor=color.black, size=dot_size_value)
+
+        // Point 2 - Last 5 candles average (Green)
+        label.new(point2_bar, point2_price, "2", style=label.style_circle, color=color.new(color.green, 0), textcolor=color.white, size=dot_size_value)
+
+        // Debug labels if enabled
+        if show_debug
+            label.new(point1_bar, point1_price, "P1: " + str.tostring(point1_price, format.mintick) + "\nBar: " + str.tostring(point1_bar), style=label.style_label_down, color=color.new(color.blue, 80), textcolor=color.blue, size=size.small, yloc=yloc.abovebar)
+
+            label.new(point3_bar, point3_price, "P3: " + str.tostring(point3_price, format.mintick) + "\nBar: " + str.tostring(point3_bar), style=label.style_label_down, color=color.new(color.yellow, 80), textcolor=color.orange, size=size.small, yloc=yloc.abovebar)
+
+            label.new(point2_bar, point2_price, "P2: " + str.tostring(point2_price, format.mintick) + "\nBar: " + str.tostring(point2_bar), style=label.style_label_down, color=color.new(color.green, 80), textcolor=color.green, size=size.small, yloc=yloc.abovebar)
+
+    // ============================================================================
+    // CALCULATE PROJECTION LINE
+    // ============================================================================
+
+    // Calculate slope using points 1 and 2 (start and end)
+    slope = (point2_price - point1_price) / lookback_range
+
+    // Calculate intercept adjusted to minimize distance to middle point
+    intercept_from_p1 = point1_price - (slope * (bar_index - lookback_range - lookback_offset))
+    intercept_from_p2 = point2_price - (slope * (bar_index - lookback_offset))
+
+    // Average the intercepts for balance
+    intercept = (intercept_from_p1 + intercept_from_p2) / 2
+
+    // Adjust to account for middle point influence
+    predicted_middle = slope * (bar_index - middle_offset - lookback_offset) + intercept
+    middle_deviation = point3_price - predicted_middle
+
+    // Apply weighted correction to minimize deviation from all three points
+    intercept_adjusted = intercept + (middle_deviation * 0.3)
+
+    // ============================================================================
+    // DRAW PROJECTION LINE
+    // ============================================================================
+
+    var line projection_line = na
+
+    if barstate.islast
+        // Delete previous line if it exists
+        if not na(projection_line)
+            line.delete(projection_line)
+
+        // Start point: first candle of the range
+        start_bar = bar_index - lookback_range - lookback_offset
+        start_price = slope * start_bar + intercept_adjusted
+
+        // End point: double the range forward from the end of the lookback period
+        end_bar = bar_index - lookback_offset + lookback_range
+        end_price = slope * end_bar + intercept_adjusted
+
+        // Draw the projection line
+        projection_line := line.new(start_bar, start_price, end_bar, end_price, color=color.new(color.purple, 0), width=2, style=line.style_solid, extend=extend.none)
+
+    // ============================================================================
+    // INFORMATION TABLE
+    // ============================================================================
+
+    var table info_table = table.new(position.top_right, 2, 7, bgcolor=color.new(color.black, 85), border_width=1, border_color=color.new(color.gray, 50))
+
+    if barstate.islast
+        // Header
+        table.cell(info_table, 0, 0, "Analysis Point", text_color=color.white, bgcolor=color.new(color.gray, 70))
+        table.cell(info_table, 1, 0, "Price", text_color=color.white, bgcolor=color.new(color.gray, 70))
+
+        // Point 1
+        table.cell(info_table, 0, 1, "First 5 Avg Open", text_color=color.aqua)
+        table.cell(info_table, 1, 1, str.tostring(point1_price, format.mintick), text_color=color.white)
+
+        // Point 3 (middle)
+        table.cell(info_table, 0, 2, "Middle 5 Avg H/L", text_color=color.yellow)
+        table.cell(info_table, 1, 2, str.tostring(point3_price, format.mintick), text_color=color.white)
+
+        // Point 2
+        table.cell(info_table, 0, 3, "Last 5 Avg Close", text_color=color.lime)
+        table.cell(info_table, 1, 3, str.tostring(point2_price, format.mintick), text_color=color.white)
+
+        // Offset info
+        table.cell(info_table, 0, 4, "Offset", text_color=color.white)
+        table.cell(info_table, 1, 4, str.tostring(lookback_offset) + " bars", text_color=lookback_offset > 0 ? color.orange : color.white)
+
+        // Trend info
+        table.cell(info_table, 0, 5, "Lookback Range", text_color=color.white)
+        table.cell(info_table, 1, 5, str.tostring(lookback_range) + " bars", text_color=color.white)
+
+        table.cell(info_table, 0, 6, "Projection Slope", text_color=color.white)
+        slope_pct = (slope / point1_price) * 100 * lookback_range
+        table.cell(info_table, 1, 6, str.tostring(slope_pct, "#.##") + "%", text_color=slope > 0 ? color.lime : color.red)
+
+else
+    // Show message when not enough bars
+    if barstate.islast
+        label.new(bar_index, close, "Need " + str.tostring(lookback_range + lookback_offset) + " bars\nCurrently: " + str.tostring(bar_index), style=label.style_label_down, color=color.new(color.red, 70), textcolor=color.white, size=size.large)
