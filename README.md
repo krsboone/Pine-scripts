@@ -22,7 +22,7 @@ Configs:
 
 **candle-analysis**
 
-`candle-enumeration.pine`: Assigns a numerical value to each candle; 1xx for bullish, 2xx for bearish. The higher the value the stronger the move. This is still a LONG work in progress with the broader goal of expanding this for historical pattern detection and fractal plotting.
+`candle-enumeration.pine`: Assigns a numerical value to each candle; 1xx for bullish, 2xx for bearish. The higher the value the stronger the move. This is still a LONG work in progress with the broader goal of expanding  for historical pattern detection and fractal plotting.
 
 Basic calculations:
 Bullish
