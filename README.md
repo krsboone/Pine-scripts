@@ -37,6 +37,8 @@ Second digit:
 Third digit:
 ((Open price - Lower wick) / open price * 100 * weighting
 
+*Note* I frequently change the calculations, as I'm not yet satisfied with the results. Current rev is mostly used as a discovery tool until I settle on what data will be most useful.
+
 Configs:
 1. Lookback range (how far back to examine)
 2. Measure offset (how many candles back to beging lookback)
