@@ -3,7 +3,7 @@
 
 ## Details
 
-A collection of some of the pine scripts I've built and use in Trading View
+A collection of a few pine scripts I've built and use in Trading View
 
 Over time I'll add more that I'm comfortable sharing
 
